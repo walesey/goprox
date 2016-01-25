@@ -45,12 +45,18 @@ func (lb *LoadBallancer) cycleIndex() {
 
 // MakeRequest - loops through each url
 func (lb *LoadBallancer) MakeRequest(url string, w http.ResponseWriter, r *http.Request) error {
+	req, err := copyRequest(r)
+	if err != nil {
+		log.Printf("Error copying proxy request: %v", err)
+		return err
+	}
+
 	for i := 0; i < len(lb.items); i = i + 1 {
 		item := lb.items[lb.index]
 		lb.cycleIndex()
 		if item.active || time.Since(item.innactiveAt) >= lb.InnactiveTimout {
 			item.active = true
-			err := makeHttpRequest(fmt.Sprintf("%v%v", item.url, url), w, r)
+			err := proxyHttpRequest(fmt.Sprintf("%v%v", item.url, url), req, w)
 			if err != nil {
 				log.Printf("Error making Http Request: %v", err)
 				item.active = false

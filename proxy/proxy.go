@@ -19,7 +19,12 @@ type DefaultMapping struct {
 
 // MakeRequest - simple mapping without state
 func (mapping DefaultMapping) MakeRequest(url string, w http.ResponseWriter, r *http.Request) error {
-	return makeHttpRequest(fmt.Sprintf("%v%v", mapping.URL, url), w, r)
+	req, err := copyRequest(r)
+	if err != nil {
+		log.Printf("Error copying proxy request: %v", err)
+		return err
+	}
+	return proxyHttpRequest(fmt.Sprintf("%v%v", mapping.URL, url), req, w)
 }
 
 // Proxy - Map a path to a proxymapping
@@ -42,7 +47,10 @@ func NewProxyServer(proxyList ...Proxy) *ProxyServer {
 
 func handleProxy(proxy Proxy) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		proxyURL := fmt.Sprintf("%v?%v", r.URL.Path[len(proxy.Path):], r.URL.RawQuery)
+		proxyURL := r.URL.Path[len(proxy.Path):]
+		if len(r.URL.RawQuery) > 0 {
+			proxyURL = fmt.Sprintf("%v?%v", proxyURL, r.URL.RawQuery)
+		}
 		err := proxy.Mapping.MakeRequest(proxyURL, w, r)
 		if err != nil {
 			log.Printf("Error making proxy request: %v", err)
