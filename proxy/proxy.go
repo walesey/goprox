@@ -42,7 +42,8 @@ func NewProxyServer(proxyList ...Proxy) *ProxyServer {
 
 func handleProxy(proxy Proxy) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		err := proxy.Mapping.MakeRequest(r.URL.Path[len(proxy.Path):], w, r)
+		proxyURL := fmt.Sprintf("%v?%v", r.URL.Path[len(proxy.Path):], r.URL.RawQuery)
+		err := proxy.Mapping.MakeRequest(proxyURL, w, r)
 		if err != nil {
 			log.Printf("Error making proxy request: %v", err)
 			w.WriteHeader(500)
