@@ -32,7 +32,7 @@ func NewLoadBallancer(urls ...string) *LoadBallancer {
 	}
 	return &LoadBallancer{
 		items:           items,
-		InnactiveTimout: 10 * time.Second,
+		InnactiveTimout: 30 * time.Second,
 	}
 }
 
