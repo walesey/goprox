@@ -12,7 +12,6 @@ type Cache interface {
 	GetLastGoodCopy(key string) (string, error)
 }
 
-// SimpleCacheItem - A Single item for Simple Cache
 type simpleCacheItem struct {
 	value     string
 	ttl       int
