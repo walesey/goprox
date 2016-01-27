@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/walesey/goprox/cache"
 )
 
 // Mapping - maps to the next url
@@ -60,6 +62,7 @@ func handleProxy(proxy Proxy) http.HandlerFunc {
 	}
 }
 
+// Listen - start the http server
 func (server *ProxyServer) Listen() {
 	port := os.Getenv("PORT")
 	if len(port) == 0 {
@@ -73,7 +76,7 @@ func (server *ProxyServer) Listen() {
 
 	s := &http.Server{
 		Addr:    fmt.Sprintf(":%v", port),
-		Handler: Logger(router),
+		Handler: Logger(cache.RequestCache(router)),
 	}
 	log.Printf("Listening on port: %v", port)
 	log.Fatal(s.ListenAndServe())
