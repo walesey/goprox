@@ -80,34 +80,43 @@ func (rcm *requestCacheMiddleware) WriteHeader(statusCode int) {
 
 // RequestCache - Middleware for caching responses per request
 func RequestCache(next http.Handler) http.HandlerFunc {
-	fc := NewFileCache()
-	rcm := &requestCacheMiddleware{c: fc}
+	var c Cache
+	c = NewFileCache()
+	rcm := &requestCacheMiddleware{c: c}
 	return func(w http.ResponseWriter, r *http.Request) {
 		key := fmt.Sprintf("%v%v", r.URL.RawPath, r.URL.RawQuery)
-		reader, closer, err := fc.Output(key)
+		reader, closer, err := c.Output(key)
 		if err == nil {
+			// return cached value
 			w.WriteHeader(200)
 			io.Copy(w, reader)
-			closer.Close()
+			if closer != nil {
+				closer.Close()
+			}
 		} else {
+			// no cached value - need to request value
 			rcm.w = w
 			rcm.cacheKey = key
 			next.ServeHTTP(rcm, r)
 			if rcm.closer != nil {
 				rcm.closer.Close()
 			}
+			// set ttl based on cache-control headers
 			cacheSpecs := getCacheSpecs(w.Header().Get("cache-control"))
 			if cacheSpecs.nocache {
-				fc.Expire(key, 0)
+				c.Expire(key, 0)
 			} else {
-				fc.Expire(key, cacheSpecs.maxage)
+				c.Expire(key, cacheSpecs.maxage)
 			}
+			// error requesting - attempt to serve last good copy
 			if rcm.statusCode >= 500 {
-				reader, closer, err := fc.OutputLastGoodCopy(key)
+				reader, closer, err := c.OutputLastGoodCopy(key)
 				if err == nil {
 					w.WriteHeader(200)
 					io.Copy(w, reader)
-					closer.Close()
+					if closer != nil {
+						closer.Close()
+					}
 				} else {
 					w.WriteHeader(500)
 					w.Write([]byte("Internal Server Error"))

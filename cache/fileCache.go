@@ -13,12 +13,12 @@ import (
 type fileCacheItem struct {
 	ttl       int
 	createdAt time.Time
+	headers   []keyValuePair
 }
 
 // FileCache - implementation of a key value store using the file system
 type FileCache struct {
-	store   map[string]*fileCacheItem
-	current *os.File
+	store map[string]*fileCacheItem
 }
 
 // NewFileCache - create a new instance of FileCache
@@ -35,25 +35,32 @@ func getFilename(key string) string {
 
 // Input - store a key value pair
 func (fCache *FileCache) Input(key string) (io.Writer, io.Closer, error) {
+	if _, err := os.Stat(".cachedata/"); os.IsNotExist(err) {
+		err = os.Mkdir(".cachedata/", 0777)
+		if err != nil {
+			log.Printf("Error creating directory for filecache: %v", err)
+			return nil, nil, err
+		}
+	}
+
 	file, err := os.Create(getFilename(key))
 	if err != nil {
 		log.Printf("Error creating file for filecache: %v", err)
 		return nil, nil, err
 	}
-	fCache.current = file
 
 	fCache.store[key] = &fileCacheItem{
 		ttl:       -1,
 		createdAt: time.Now().UTC(),
 	}
-	return fCache.current, fCache.current, nil
+	return file, file, nil
 }
 
 // Output - get the value stored as key, returns error if ttl is expired or if nothing is found
 func (fCache *FileCache) Output(key string) (io.Reader, io.Closer, error) {
-	value, ok := fCache.store[key]
+	item, ok := fCache.store[key]
 	if ok {
-		if value.ttl >= 0 && time.Since(value.createdAt).Seconds() > float64(value.ttl) {
+		if item.ttl >= 0 && time.Since(item.createdAt).Seconds() > float64(item.ttl) {
 			return nil, nil, fmt.Errorf("Value Has Expired")
 		}
 		file, err := os.Open(getFilename(key))
@@ -79,8 +86,8 @@ func (fCache *FileCache) OutputLastGoodCopy(key string) (io.Reader, io.Closer, e
 
 // Expire set an expiry time for a cache entry with a ttl in seconds, if ttl < 0 ttl will be forever
 func (fCache *FileCache) Expire(key string, ttl int) {
-	entry, ok := fCache.store[key]
+	item, ok := fCache.store[key]
 	if ok {
-		entry.ttl = ttl
+		item.ttl = ttl
 	}
 }
