@@ -66,7 +66,7 @@ func (rcm *requestCacheMiddleware) WriteHeader(statusCode int) {
 	if statusInValidRange(rcm.statusCode) {
 		writer, closer, err := rcm.c.Input(rcm.cacheKey)
 		if err != nil {
-			fmt.Printf("Error geting cache input: %v", err)
+			fmt.Printf("Error getting cache input: %v", err)
 		}
 		rcm.writer = writer
 		rcm.closer = closer
@@ -87,7 +87,7 @@ func RequestCache(next http.Handler) http.HandlerFunc {
 	hStore := newHeaderStore()
 	rcm := &requestCacheMiddleware{c: c}
 	return func(w http.ResponseWriter, r *http.Request) {
-		key := fmt.Sprintf("%v%v", r.URL.RawPath, r.URL.RawQuery)
+		key := fmt.Sprintf("%v%v", r.URL.Path, r.URL.RawQuery)
 		reader, closer, err := c.Output(key)
 		if err == nil {
 			// return cached value
