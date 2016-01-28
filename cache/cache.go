@@ -9,7 +9,3 @@ type Cache interface {
 	OutputLastGoodCopy(key string) (io.Reader, io.Closer, error)
 	Expire(key string, ttl int)
 }
-
-type keyValuePair struct {
-	key, value string
-}

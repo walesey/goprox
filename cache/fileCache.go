@@ -13,7 +13,6 @@ import (
 type fileCacheItem struct {
 	ttl       int
 	createdAt time.Time
-	headers   []keyValuePair
 }
 
 // FileCache - implementation of a key value store using the file system

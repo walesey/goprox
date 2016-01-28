@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/walesey/goprox/cache"
+	"github.com/walesey/goprox/util"
 )
 
 // Mapping - maps to the next url
@@ -21,12 +22,12 @@ type DefaultMapping struct {
 
 // MakeRequest - simple mapping without state
 func (mapping DefaultMapping) MakeRequest(url string, w http.ResponseWriter, r *http.Request) error {
-	req, err := copyRequest(r)
+	req, err := util.CopyRequest(r)
 	if err != nil {
 		log.Printf("Error copying proxy request: %v", err)
 		return err
 	}
-	return proxyHttpRequest(fmt.Sprintf("%v%v", mapping.URL, url), req, w)
+	return util.ProxyHttpRequest(fmt.Sprintf("%v%v", mapping.URL, url), req, w)
 }
 
 // Proxy - Map a path to a proxymapping

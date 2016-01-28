@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/walesey/goprox/util"
 )
 
 // A round robin load ballancer that maintains a list of urls and their active status
@@ -45,7 +47,7 @@ func (lb *LoadBallancer) cycleIndex() {
 
 // MakeRequest - loops through each url
 func (lb *LoadBallancer) MakeRequest(url string, w http.ResponseWriter, r *http.Request) error {
-	req, err := copyRequest(r)
+	req, err := util.CopyRequest(r)
 	if err != nil {
 		log.Printf("Error copying proxy request: %v", err)
 		return err
@@ -56,7 +58,7 @@ func (lb *LoadBallancer) MakeRequest(url string, w http.ResponseWriter, r *http.
 		lb.cycleIndex()
 		if item.active || time.Since(item.innactiveAt) >= lb.InnactiveTimout {
 			item.active = true
-			err := proxyHttpRequest(fmt.Sprintf("%v%v", item.url, url), req, w)
+			err := util.ProxyHttpRequest(fmt.Sprintf("%v%v", item.url, url), req, w)
 			if err != nil {
 				log.Printf("Error making Http Request: %v", err)
 				item.active = false

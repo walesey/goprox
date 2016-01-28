@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/walesey/goprox/util"
 )
 
 type cacheSpecs struct {
@@ -33,8 +35,8 @@ func getCacheSpecs(cacheControl string) cacheSpecs {
 }
 
 type requestCacheMiddleware struct {
-	c          Cache
 	cacheKey   string
+	c          Cache
 	w          http.ResponseWriter
 	writer     io.Writer
 	closer     io.Closer
@@ -82,13 +84,16 @@ func (rcm *requestCacheMiddleware) WriteHeader(statusCode int) {
 func RequestCache(next http.Handler) http.HandlerFunc {
 	var c Cache
 	c = NewFileCache()
+	hStore := newHeaderStore()
 	rcm := &requestCacheMiddleware{c: c}
 	return func(w http.ResponseWriter, r *http.Request) {
 		key := fmt.Sprintf("%v%v", r.URL.RawPath, r.URL.RawQuery)
 		reader, closer, err := c.Output(key)
 		if err == nil {
 			// return cached value
-			w.WriteHeader(200)
+			headers := hStore.Headers(key)
+			util.CopyHeaders(headers.headers, w.Header())
+			w.WriteHeader(headers.statusCode)
 			io.Copy(w, reader)
 			if closer != nil {
 				closer.Close()
@@ -98,9 +103,18 @@ func RequestCache(next http.Handler) http.HandlerFunc {
 			rcm.w = w
 			rcm.cacheKey = key
 			next.ServeHTTP(rcm, r)
+			if rcm.writer != nil {
+				headers := make(map[string][]string)
+				util.CopyHeaders(w.Header(), headers)
+				hStore.StoreHeaders(key, responseHeaders{
+					statusCode: rcm.statusCode,
+					headers:    w.Header(),
+				})
+			}
 			if rcm.closer != nil {
 				rcm.closer.Close()
 			}
+
 			// set ttl based on cache-control headers
 			cacheSpecs := getCacheSpecs(w.Header().Get("cache-control"))
 			if cacheSpecs.nocache {
@@ -112,7 +126,9 @@ func RequestCache(next http.Handler) http.HandlerFunc {
 			if rcm.statusCode >= 500 {
 				reader, closer, err := c.OutputLastGoodCopy(key)
 				if err == nil {
-					w.WriteHeader(200)
+					headers := hStore.Headers(key)
+					util.CopyHeaders(headers.headers, w.Header())
+					w.WriteHeader(headers.statusCode)
 					io.Copy(w, reader)
 					if closer != nil {
 						closer.Close()

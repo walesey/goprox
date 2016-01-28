@@ -12,7 +12,6 @@ type memoryCacheItem struct {
 	data      []byte
 	ttl       int
 	createdAt time.Time
-	headers   []keyValuePair
 }
 
 func (item *memoryCacheItem) Close() error {
