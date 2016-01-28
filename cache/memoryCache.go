@@ -36,11 +36,11 @@ func NewMemoryCache() Cache {
 func (mCache *MemoryCache) Input(key string) (io.Writer, io.Closer, error) {
 	buffer := bytes.NewBuffer([]byte{})
 	item := &memoryCacheItem{
-		buffer:    buffer,
-		ttl:       -1,
-		createdAt: time.Now().UTC(),
+		buffer: buffer,
+		ttl:    -1,
 	}
 	mCache.store[key] = item
+	mCache.Refresh(key)
 	return buffer, item, nil
 }
 
@@ -71,5 +71,13 @@ func (mCache *MemoryCache) Expire(key string, ttl int) {
 	item, ok := mCache.store[key]
 	if ok {
 		item.ttl = ttl
+	}
+}
+
+// Refresh - reset the expiry timer
+func (mCache *MemoryCache) Refresh(key string) {
+	item, ok := mCache.store[key]
+	if ok {
+		item.createdAt = time.Now().UTC()
 	}
 }

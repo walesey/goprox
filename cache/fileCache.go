@@ -48,10 +48,8 @@ func (fCache *FileCache) Input(key string) (io.Writer, io.Closer, error) {
 		return nil, nil, err
 	}
 
-	fCache.store[key] = &fileCacheItem{
-		ttl:       -1,
-		createdAt: time.Now().UTC(),
-	}
+	fCache.store[key] = &fileCacheItem{ttl: -1}
+	fCache.Refresh(key)
 	return file, file, nil
 }
 
@@ -88,5 +86,13 @@ func (fCache *FileCache) Expire(key string, ttl int) {
 	item, ok := fCache.store[key]
 	if ok {
 		item.ttl = ttl
+	}
+}
+
+// Refresh - reset the expiry timer
+func (fCache *FileCache) Refresh(key string) {
+	item, ok := fCache.store[key]
+	if ok {
+		item.createdAt = time.Now().UTC()
 	}
 }

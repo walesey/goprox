@@ -9,11 +9,17 @@ import (
 	"github.com/walesey/goprox/proxy"
 )
 
+// ServerConfig - config for a singe proxy server
 type ServerConfig struct {
+	ServerType string   `json:"serverType"`
+	Path       string   `json:"path"`
+	Mapping    string   `json:"mapping"`
+	Mappings   []string `json:"mappings"`
 }
 
+// Config - main config
 type Config struct {
-	servers []ServerConfig
+	Servers []ServerConfig `json:"servers"`
 }
 
 func main() {
@@ -28,23 +34,27 @@ func main() {
 	}
 
 	var config Config
-	err = json.Unmarshal(configJson, config)
+	err = json.Unmarshal(configJson, &config)
 	if err != nil {
 		log.Printf("Error Unmarshaling config file: %v", err)
 	}
 
-	proxy.NewProxyServer(
-		proxy.Proxy{
-			Path:    "/server1/",
-			Mapping: proxy.DefaultMapping{"http://localhost:3000/"},
-		},
-		proxy.Proxy{
-			Path: "/server2/",
-			Mapping: proxy.NewLoadBallancer(
-				"http://localhost:3000/",
-				"http://localhost:3001/",
-				"http://localhost:3002/",
-			),
-		},
-	).Listen()
+	proxies := make([]proxy.Proxy, len(config.Servers))
+	for index, serverConfig := range config.Servers {
+		if serverConfig.ServerType == "loadBallancer" {
+			log.Printf("Configuring loadballancer at %v", serverConfig.Path)
+			proxies[index] = proxy.Proxy{
+				Path:    serverConfig.Path,
+				Mapping: proxy.NewLoadBallancer(serverConfig.Mappings...),
+			}
+		} else {
+			log.Printf("Configuring proxy at %v", serverConfig.Path)
+			proxies[index] = proxy.Proxy{
+				Path:    serverConfig.Path,
+				Mapping: proxy.DefaultMapping{serverConfig.Mapping},
+			}
+		}
+	}
+
+	proxy.NewProxyServer(proxies...).Listen()
 }

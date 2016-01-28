@@ -1,3 +1,17 @@
 {
-    
+  "servers": [
+    {
+      "path": "/server1/",
+      "mapping": "http://localhost:5000/"
+    },
+    {
+      "path": "/server2/",
+      "serverType": "loadBallancer",
+      "mappings": [
+        "http://localhost:3000/",
+        "http://localhost:3001/",
+        "http://localhost:3002/"
+      ]
+    }
+  ]
 }

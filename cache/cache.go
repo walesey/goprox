@@ -8,4 +8,5 @@ type Cache interface {
 	Output(key string) (io.Reader, io.Closer, error)
 	OutputLastGoodCopy(key string) (io.Reader, io.Closer, error)
 	Expire(key string, ttl int)
+	Refresh(key string)
 }
