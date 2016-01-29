@@ -1,7 +1,7 @@
 {
   "servers": [
     {
-      "path": "/server1/",
+      "path": "/tv/",
       "mapping": "http://localhost:5000/"
     },
     {

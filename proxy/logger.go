@@ -29,11 +29,12 @@ func Logger(next http.Handler) http.HandlerFunc {
 	ld := &loggerData{}
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		path := r.URL.Path
 		ld.w = w
 		ld.statusCode = 200
 		next.ServeHTTP(ld, r)
 		method := r.Method
 		statusCode := ld.statusCode
-		log.Printf("[REQUEST] %v - %v - %v %v", statusCode, time.Since(start), method, r.URL.Path)
+		log.Printf("[REQUEST] %v - %v - %v %v", statusCode, time.Since(start), method, path)
 	}
 }
