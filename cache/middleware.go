@@ -62,7 +62,7 @@ func (rci *requestCacheInterceptor) Write(data []byte) (int, error) {
 	if rci.writer != nil {
 		rci.writer.Write(data)
 	}
-	if rci.statusCode < 500 {
+	if statusInValidRange(rci.statusCode) {
 		return rci.w.Write(data)
 	}
 	return len(data), nil
@@ -100,29 +100,25 @@ func NewRequestCache(cache Cache) *RequestCache {
 func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	// etag handling
 	key := fmt.Sprintf("%v%v", r.URL.Path, r.URL.RawQuery)
+	headers := rc.hStore.Headers(key)
+	etag := headers.headers.Get("etag")
 	ifNoneMatch := r.Header.Get("If-None-Match")
-	r.Header.Del("If-None-Match")
-	if len(ifNoneMatch) > 0 {
-		headers := rc.hStore.Headers(key)
-		etag := headers.headers.Get("etag")
-		if ifNoneMatch == etag {
-			util.CopyHeaders(headers.headers, w.Header())
-			w.WriteHeader(304)
-			w.Write([]byte(""))
-			return
-		}
-	}
 
 	// check for cached value
 	reader, closer, err := rc.cache.Output(key)
 	if err == nil {
-		// return cached value
-		headers := rc.hStore.Headers(key)
-		util.CopyHeaders(headers.headers, w.Header())
-		w.WriteHeader(headers.statusCode)
-		io.Copy(w, reader)
-		if closer != nil {
-			closer.Close()
+		if len(ifNoneMatch) > 0 && ifNoneMatch == etag {
+			util.CopyHeaders(headers.headers, w.Header())
+			w.WriteHeader(304)
+			w.Write([]byte(""))
+		} else {
+			// return cached value
+			util.CopyHeaders(headers.headers, w.Header())
+			w.WriteHeader(headers.statusCode)
+			io.Copy(w, reader)
+			if closer != nil {
+				closer.Close()
+			}
 		}
 	} else {
 		// no cached value - request a new value
@@ -143,7 +139,9 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 
 		// set ttl based on cache-control headers
 		cacheControl := w.Header().Get("cache-control")
-		if len(cacheControl) == 0 {
+		if rc.rci.statusCode >= 304 {
+			rc.cache.Refresh(key)
+		} else if len(cacheControl) == 0 {
 			rc.cache.Expire(key, rc.DefaultTTL)
 		} else {
 			cacheSpecs := getCacheSpecs(cacheControl)

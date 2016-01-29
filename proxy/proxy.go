@@ -79,7 +79,7 @@ func (server *ProxyServer) Listen() {
 
 	s := &http.Server{
 		Addr:    fmt.Sprintf(":%v", port),
-		Handler: Logger(requestCache.Handler(router)),
+		Handler: LockedHandler(Logger(requestCache.Handler(router))),
 	}
 	log.Printf("Listening on port: %v", port)
 	log.Fatal(s.ListenAndServe())
