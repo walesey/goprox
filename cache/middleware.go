@@ -93,17 +93,18 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 	storedHeaders := rc.hStore.Headers(key)
 	etag := storedHeaders.headers.Get("etag")
 	ifNoneMatch := r.Header.Get("If-None-Match")
+	r.Header.Del("If-None-Match")
+	r.Header.Del("cache-control")
 
 	// check for cached value
 	value, err := rc.cache.Get(key)
 	if err == nil {
+		copyHeaders(storedHeaders.headers, w.Header())
 		if len(ifNoneMatch) > 0 && ifNoneMatch == etag {
-			copyHeaders(storedHeaders.headers, w.Header())
 			w.WriteHeader(304)
 			w.Write([]byte(""))
 		} else {
 			// return cached value
-			copyHeaders(storedHeaders.headers, w.Header())
 			w.WriteHeader(storedHeaders.statusCode)
 			w.Write(value)
 		}
@@ -113,7 +114,6 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 			buffer: bytes.Buffer{},
 			writer: w,
 		}
-		r.Header.Del("If-None-Match")
 		if len(etag) > 0 {
 			r.Header.Add("If-None-Match", etag)
 		}
@@ -127,6 +127,7 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 				statusCode: rci.statusCode,
 				headers:    headers,
 			})
+			rc.cache.Set(key, rci.buffer.Bytes())
 			// set ttl based on cache-control headers
 			cacheControl := w.Header().Get("cache-control")
 			if len(cacheControl) == 0 {
@@ -143,18 +144,20 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 
 		if rci.statusCode == 304 {
 			rc.cache.Refresh(key)
-			value, err := rc.cache.Get(key)
+			value, err := rc.cache.GetLastGoodCopy(key)
 			if err == nil {
+				copyHeaders(storedHeaders.headers, w.Header())
 				if len(ifNoneMatch) > 0 && ifNoneMatch == etag {
-					copyHeaders(storedHeaders.headers, w.Header())
 					w.WriteHeader(304)
 					w.Write([]byte(""))
 				} else {
 					// return cached value
-					copyHeaders(storedHeaders.headers, w.Header())
 					w.WriteHeader(storedHeaders.statusCode)
 					w.Write(value)
 				}
+			} else {
+				w.WriteHeader(500)
+				w.Write([]byte("Internal Server Error"))
 			}
 		}
 
