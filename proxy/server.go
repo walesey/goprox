@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+
+	"github.com/walesey/goprox/cache"
 )
 
 // ServerConfig - config for a singe proxy server
@@ -18,7 +20,9 @@ type ServerConfig struct {
 
 // Config - main config
 type Config struct {
-	Servers []ServerConfig `json:"servers"`
+	Servers    []ServerConfig `json:"servers"`
+	CacheType  string         `json:"cacheType"`
+	DefaultTTL int            `json:"defaultTTL"`
 }
 
 // ProxyServer - main server with config
@@ -61,9 +65,17 @@ func (server *ProxyServer) Listen() {
 		}
 	}
 
+	var c cache.Cache
+	if server.config.CacheType == "fileSystem" {
+		c = cache.NewFileCache()
+	} else {
+		c = cache.NewMemoryCache()
+	}
+	requestCache := cache.NewRequestCache(c, server.config.DefaultTTL)
+
 	s := &http.Server{
 		Addr:    fmt.Sprintf(":%v", port),
-		Handler: Logger(router),
+		Handler: Logger(requestCache.Handler(router)),
 	}
 	log.Printf("Listening on port: %v", port)
 	log.Fatal(s.ListenAndServe())

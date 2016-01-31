@@ -6,35 +6,33 @@ import (
 	"time"
 )
 
-type loggerData struct {
+type loggerInterptor struct {
 	w          http.ResponseWriter
 	statusCode int
 }
 
-func (ld *loggerData) Header() http.Header {
-	return ld.w.Header()
+func (li *loggerInterptor) Header() http.Header {
+	return li.w.Header()
 }
 
-func (ld *loggerData) Write(data []byte) (int, error) {
-	return ld.w.Write(data)
+func (li *loggerInterptor) Write(data []byte) (int, error) {
+	return li.w.Write(data)
 }
 
-func (ld *loggerData) WriteHeader(statusCode int) {
-	ld.w.WriteHeader(statusCode)
-	ld.statusCode = statusCode
+func (li *loggerInterptor) WriteHeader(statusCode int) {
+	li.w.WriteHeader(statusCode)
+	li.statusCode = statusCode
 }
 
 // Logger - writes information about http requests to the log
 func Logger(next http.Handler) http.HandlerFunc {
-	ld := &loggerData{}
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		path := r.URL.Path
-		ld.w = w
-		ld.statusCode = 200
-		next.ServeHTTP(ld, r)
+		li := &loggerInterptor{w: w}
+		next.ServeHTTP(li, r)
 		method := r.Method
-		statusCode := ld.statusCode
+		statusCode := li.statusCode
 		log.Printf("[REQUEST] %v - %v - %v %v", statusCode, time.Since(start), method, path)
 	}
 }

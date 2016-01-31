@@ -1,12 +1,9 @@
 package cache
 
-import "io"
-
 // Cache - interface for a key value store
 type Cache interface {
-	Input(key string) (io.Writer, io.Closer, error)
-	Output(key string) (io.Reader, io.Closer, error)
-	OutputLastGoodCopy(key string) (io.Reader, io.Closer, error)
-	Expire(key string, ttl int)
+	Set(key string, value []byte, ttl int)
+	Get(key string) ([]byte, error)
+	GetLastGoodCopy(key string) ([]byte, error)
 	Refresh(key string)
 }
