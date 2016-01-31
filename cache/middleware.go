@@ -166,8 +166,14 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 			value, err := rc.cache.GetLastGoodCopy(key)
 			if err == nil {
 				copyHeaders(storedHeaders.headers, w.Header())
-				w.WriteHeader(storedHeaders.statusCode)
-				w.Write(value)
+				if len(ifNoneMatch) > 0 && ifNoneMatch == etag {
+					w.WriteHeader(304)
+					w.Write([]byte(""))
+				} else {
+					// return cached value
+					w.WriteHeader(storedHeaders.statusCode)
+					w.Write(value)
+				}
 			} else {
 				w.WriteHeader(500)
 				w.Write([]byte("Internal Server Error"))
