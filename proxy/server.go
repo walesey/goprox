@@ -67,7 +67,7 @@ func (server *ProxyServer) Listen() {
 
 	var c cache.Cache
 	if server.config.CacheType == "fileSystem" {
-		c = cache.NewFileCache()
+		// c = cache.NewFileCache()
 	} else {
 		c = cache.NewMemoryCache()
 	}

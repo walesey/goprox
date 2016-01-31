@@ -1,8 +1,8 @@
 package cache
 
 import (
+	"bytes"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,15 +12,11 @@ type RequestCache struct {
 	defaultTTL int
 	cache      Cache
 	hStore     *headerStore
-	rci        *requestCacheInterceptor
 }
 
 type requestCacheInterceptor struct {
-	cacheKey   string
-	cache      Cache
-	w          http.ResponseWriter
-	writer     io.Writer
-	closer     io.Closer
+	buffer     bytes.Buffer
+	writer     http.ResponseWriter
 	statusCode int
 }
 
@@ -53,6 +49,9 @@ func statusInValidRange(statusCode int) bool {
 }
 
 func copyHeaders(src, dest http.Header) {
+	for key, _ := range dest {
+		dest.Del(key)
+	}
 	for key, values := range src {
 		for _, value := range values {
 			dest.Add(key, value)
@@ -61,15 +60,13 @@ func copyHeaders(src, dest http.Header) {
 }
 
 func (rci *requestCacheInterceptor) Header() http.Header {
-	return rci.w.Header()
+	return rci.writer.Header()
 }
 
 func (rci *requestCacheInterceptor) Write(data []byte) (int, error) {
-	if rci.writer != nil {
-		rci.writer.Write(data)
-	}
 	if statusInValidRange(rci.statusCode) {
-		return rci.w.Write(data)
+		rci.buffer.Write(data)
+		return rci.writer.Write(data)
 	}
 	return len(data), nil
 }
@@ -77,19 +74,7 @@ func (rci *requestCacheInterceptor) Write(data []byte) (int, error) {
 func (rci *requestCacheInterceptor) WriteHeader(statusCode int) {
 	rci.statusCode = statusCode
 	if statusInValidRange(rci.statusCode) {
-		writer, closer, err := rci.cache.Input(rci.cacheKey)
-		if err != nil {
-			fmt.Printf("Error getting cache input: %v", err)
-		}
-		rci.writer = writer
-		rci.closer = closer
-	} else {
-		rci.writer = nil
-		rci.closer = nil
-	}
-
-	if rci.statusCode < 500 {
-		rci.w.WriteHeader(statusCode)
+		rci.writer.WriteHeader(statusCode)
 	}
 }
 
@@ -99,81 +84,93 @@ func NewRequestCache(cache Cache, defaultTTL int) *RequestCache {
 		defaultTTL: defaultTTL,
 		cache:      cache,
 		hStore:     newHeaderStore(),
-		rci:        &requestCacheInterceptor{cache: cache},
 	}
 }
 
 func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	// etag handling
 	key := fmt.Sprintf("%v%v", r.URL.Path, r.URL.RawQuery)
-	headers := rc.hStore.Headers(key)
-	etag := headers.headers.Get("etag")
+	storedHeaders := rc.hStore.Headers(key)
+	etag := storedHeaders.headers.Get("etag")
 	ifNoneMatch := r.Header.Get("If-None-Match")
 
 	// check for cached value
-	reader, closer, err := rc.cache.Output(key)
+	value, err := rc.cache.Get(key)
 	if err == nil {
 		if len(ifNoneMatch) > 0 && ifNoneMatch == etag {
-			copyHeaders(headers.headers, w.Header())
+			copyHeaders(storedHeaders.headers, w.Header())
 			w.WriteHeader(304)
 			w.Write([]byte(""))
 		} else {
 			// return cached value
-			copyHeaders(headers.headers, w.Header())
-			w.WriteHeader(headers.statusCode)
-			io.Copy(w, reader)
-			if closer != nil {
-				closer.Close()
-			}
+			copyHeaders(storedHeaders.headers, w.Header())
+			w.WriteHeader(storedHeaders.statusCode)
+			w.Write(value)
 		}
 	} else {
 		// no cached value - request a new value
-		rc.rci.w = w
-		rc.rci.cacheKey = key
-		next.ServeHTTP(rc.rci, r)
-		if rc.rci.writer != nil {
+		rci := &requestCacheInterceptor{
+			buffer: bytes.Buffer{},
+			writer: w,
+		}
+		r.Header.Del("If-None-Match")
+		if len(etag) > 0 {
+			r.Header.Add("If-None-Match", etag)
+		}
+
+		next.ServeHTTP(rci, r)
+
+		if statusInValidRange(rci.statusCode) {
 			headers := make(map[string][]string)
 			copyHeaders(w.Header(), headers)
 			rc.hStore.StoreHeaders(key, responseHeaders{
-				statusCode: rc.rci.statusCode,
-				headers:    w.Header(),
+				statusCode: rci.statusCode,
+				headers:    headers,
 			})
-		}
-		if rc.rci.closer != nil {
-			rc.rci.closer.Close()
-		}
-
-		// set ttl based on cache-control headers
-		cacheControl := w.Header().Get("cache-control")
-		if rc.rci.statusCode >= 304 {
-			rc.cache.Refresh(key)
-		} else if len(cacheControl) == 0 {
-			rc.cache.Expire(key, rc.defaultTTL)
-		} else {
-			cacheSpecs := getCacheSpecs(cacheControl)
-			if cacheSpecs.nocache {
-				rc.cache.Expire(key, 0)
+			// set ttl based on cache-control headers
+			cacheControl := w.Header().Get("cache-control")
+			if len(cacheControl) == 0 {
+				rc.cache.Expire(key, rc.defaultTTL)
 			} else {
-				rc.cache.Expire(key, cacheSpecs.maxage)
+				cacheSpecs := getCacheSpecs(cacheControl)
+				if cacheSpecs.nocache {
+					rc.cache.Expire(key, 0)
+				} else {
+					rc.cache.Expire(key, cacheSpecs.maxage)
+				}
 			}
 		}
 
-		// error requesting - attempt to serve last good copy
-		if rc.rci.statusCode >= 500 {
-			reader, closer, err := rc.cache.OutputLastGoodCopy(key)
+		if rci.statusCode == 304 {
+			rc.cache.Refresh(key)
+			value, err := rc.cache.Get(key)
 			if err == nil {
-				headers := rc.hStore.Headers(key)
-				copyHeaders(headers.headers, w.Header())
-				w.WriteHeader(headers.statusCode)
-				io.Copy(w, reader)
-				if closer != nil {
-					closer.Close()
+				if len(ifNoneMatch) > 0 && ifNoneMatch == etag {
+					copyHeaders(storedHeaders.headers, w.Header())
+					w.WriteHeader(304)
+					w.Write([]byte(""))
+				} else {
+					// return cached value
+					copyHeaders(storedHeaders.headers, w.Header())
+					w.WriteHeader(storedHeaders.statusCode)
+					w.Write(value)
 				}
+			}
+		}
+
+		if rci.statusCode >= 500 {
+			// error requesting - attempt to serve last good copy
+			value, err := rc.cache.GetLastGoodCopy(key)
+			if err == nil {
+				copyHeaders(storedHeaders.headers, w.Header())
+				w.WriteHeader(storedHeaders.statusCode)
+				w.Write(value)
 			} else {
 				w.WriteHeader(500)
 				w.Write([]byte("Internal Server Error"))
 			}
 		}
+
 	}
 }
 

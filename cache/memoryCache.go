@@ -24,10 +24,10 @@ func NewMemoryCache() Cache {
 }
 
 // Set - store a key value pair
-func (mCache *MemoryCache) Set(key string, value []byte, ttl int) {
+func (mCache *MemoryCache) Set(key string, value []byte) {
 	item := &memoryCacheItem{
 		value: value,
-		ttl:   ttl,
+		ttl:   -1,
 	}
 	mCache.store[key] = item
 	mCache.Refresh(key)
@@ -60,5 +60,13 @@ func (mCache *MemoryCache) Refresh(key string) {
 	item, ok := mCache.store[key]
 	if ok {
 		item.createdAt = time.Now().UTC()
+	}
+}
+
+// Expire - set the expiry time
+func (mCache *MemoryCache) Expire(key string, ttl int) {
+	item, ok := mCache.store[key]
+	if ok {
+		item.ttl = ttl
 	}
 }
