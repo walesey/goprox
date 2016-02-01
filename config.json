@@ -9,10 +9,7 @@
       },
     {
       "path": "/images/",
-      "serverType": "loadBallancer",
-      "mappings": [
-        "http://localhost:5000/"
-      ]
+      "mapping": "http://localhost:5000/"
     }
   ]
 }

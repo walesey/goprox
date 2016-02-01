@@ -94,7 +94,6 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 	etag := storedHeaders.headers.Get("etag")
 	ifNoneMatch := r.Header.Get("If-None-Match")
 	r.Header.Del("If-None-Match")
-	r.Header.Del("cache-control")
 
 	// check for cached value
 	value, err := rc.cache.Get(key)
