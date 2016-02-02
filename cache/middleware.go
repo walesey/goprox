@@ -2,6 +2,7 @@ package cache
 
 import (
 	"bytes"
+	"crypto/md5"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -117,16 +118,23 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 			r.Header.Add("If-None-Match", etag)
 		}
 
+		//make a request to the server
 		next.ServeHTTP(rci, r)
 
+		//check if response is cacheable
 		if statusInValidRange(rci.statusCode) {
+			data := rci.buffer.Bytes()
+			// add etag if none exists
+			if len(w.Header().Get("etag")) == 0 {
+				w.Header().Set("etag", fmt.Sprintf("W/\"%x\"", md5.Sum(data)))
+			}
 			headers := make(map[string][]string)
 			copyHeaders(w.Header(), headers)
 			rc.hStore.StoreHeaders(key, responseHeaders{
 				statusCode: rci.statusCode,
 				headers:    headers,
 			})
-			rc.cache.Set(key, rci.buffer.Bytes())
+			rc.cache.Set(key, data)
 			// set ttl based on cache-control headers
 			cacheControl := w.Header().Get("cache-control")
 			if len(cacheControl) == 0 {
