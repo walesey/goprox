@@ -17,7 +17,7 @@ type RequestCache struct {
 
 type requestCacheInterceptor struct {
 	buffer     bytes.Buffer
-	writer     http.ResponseWriter
+	header     http.Header
 	statusCode int
 }
 
@@ -61,22 +61,18 @@ func copyHeaders(src, dest http.Header) {
 }
 
 func (rci *requestCacheInterceptor) Header() http.Header {
-	return rci.writer.Header()
+	return rci.header
 }
 
 func (rci *requestCacheInterceptor) Write(data []byte) (int, error) {
 	if statusInValidRange(rci.statusCode) {
-		rci.buffer.Write(data)
-		return rci.writer.Write(data)
+		return rci.buffer.Write(data)
 	}
 	return len(data), nil
 }
 
 func (rci *requestCacheInterceptor) WriteHeader(statusCode int) {
 	rci.statusCode = statusCode
-	if statusInValidRange(rci.statusCode) {
-		rci.writer.WriteHeader(statusCode)
-	}
 }
 
 // NewRequestCache - create a new instance of NewRequestCache
@@ -92,27 +88,20 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 	// etag handling
 	key := fmt.Sprintf("%v%v", r.URL.Path, r.URL.RawQuery)
 	storedHeaders := rc.hStore.Headers(key)
-	etag := storedHeaders.headers.Get("etag")
+	header := storedHeaders.headers
+	statusCode := storedHeaders.statusCode
+	etag := header.Get("etag")
 	ifNoneMatch := r.Header.Get("If-None-Match")
 	r.Header.Del("If-None-Match")
 
 	// check for cached value
 	value, err := rc.cache.Get(key)
-	if err == nil {
-		copyHeaders(storedHeaders.headers, w.Header())
-		if len(ifNoneMatch) > 0 && ifNoneMatch == etag {
-			w.WriteHeader(304)
-			w.Write([]byte(""))
-		} else {
-			// return cached value
-			w.WriteHeader(storedHeaders.statusCode)
-			w.Write(value)
-		}
-	} else {
+	if err != nil {
 		// no cached value - request a new value
+		header = make(map[string][]string)
 		rci := &requestCacheInterceptor{
 			buffer: bytes.Buffer{},
-			writer: w,
+			header: header,
 		}
 		if len(etag) > 0 {
 			r.Header.Add("If-None-Match", etag)
@@ -123,20 +112,19 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 
 		//check if response is cacheable
 		if statusInValidRange(rci.statusCode) {
-			data := rci.buffer.Bytes()
+			value = rci.buffer.Bytes()
+			statusCode = rci.statusCode
 			// add etag if none exists
-			if len(w.Header().Get("etag")) == 0 {
-				w.Header().Set("etag", fmt.Sprintf("W/\"%x\"", md5.Sum(data)))
+			if len(header.Get("etag")) == 0 {
+				header.Set("etag", fmt.Sprintf("W/\"%x\"", md5.Sum(value)))
 			}
-			headers := make(map[string][]string)
-			copyHeaders(w.Header(), headers)
 			rc.hStore.StoreHeaders(key, responseHeaders{
 				statusCode: rci.statusCode,
-				headers:    headers,
+				headers:    header,
 			})
-			rc.cache.Set(key, data)
+			rc.cache.Set(key, value)
 			// set ttl based on cache-control headers
-			cacheControl := w.Header().Get("cache-control")
+			cacheControl := header.Get("cache-control")
 			if len(cacheControl) == 0 {
 				rc.cache.Expire(key, rc.defaultTTL)
 			} else {
@@ -149,44 +137,25 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 			}
 		}
 
-		if rci.statusCode == 304 {
-			rc.cache.Refresh(key)
-			value, err := rc.cache.GetLastGoodCopy(key)
-			if err == nil {
-				copyHeaders(storedHeaders.headers, w.Header())
-				if len(ifNoneMatch) > 0 && ifNoneMatch == etag {
-					w.WriteHeader(304)
-					w.Write([]byte(""))
-				} else {
-					// return cached value
-					w.WriteHeader(storedHeaders.statusCode)
-					w.Write(value)
-				}
-			} else {
-				w.WriteHeader(500)
-				w.Write([]byte("Internal Server Error"))
-			}
-		}
-
-		if rci.statusCode >= 500 {
+		if rci.statusCode == 304 || rci.statusCode >= 500 {
 			// error requesting - attempt to serve last good copy
-			value, err := rc.cache.GetLastGoodCopy(key)
-			if err == nil {
-				copyHeaders(storedHeaders.headers, w.Header())
-				if len(ifNoneMatch) > 0 && ifNoneMatch == etag {
-					w.WriteHeader(304)
-					w.Write([]byte(""))
-				} else {
-					// return cached value
-					w.WriteHeader(storedHeaders.statusCode)
-					w.Write(value)
-				}
-			} else {
+			rc.cache.Refresh(key)
+			value, err = rc.cache.GetLastGoodCopy(key)
+			if err != nil {
 				w.WriteHeader(500)
 				w.Write([]byte("Internal Server Error"))
 			}
 		}
+	}
 
+	copyHeaders(header, w.Header())
+	if len(ifNoneMatch) > 0 && ifNoneMatch == etag {
+		w.WriteHeader(304)
+		w.Write([]byte(""))
+	} else {
+		// return cached value
+		w.WriteHeader(statusCode)
+		w.Write(value)
 	}
 }
 
