@@ -144,6 +144,7 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 			if err != nil {
 				w.WriteHeader(500)
 				w.Write([]byte("Internal Server Error"))
+				return
 			}
 		}
 	}

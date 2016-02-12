@@ -1,6 +1,7 @@
 {
     "defaultTTL": 300,
-    "CacheType": "memoryCache",
+    "cacheType": "memoryCache",
+    "colorLogs": true,
     "servers": [
         {
             "path": "/",

@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/walesey/goprox/middleware"
+
 	"github.com/walesey/goprox/cache"
 )
 
@@ -23,6 +25,7 @@ type Config struct {
 	Servers    []ServerConfig `json:"servers"`
 	CacheType  string         `json:"cacheType"`
 	DefaultTTL int            `json:"defaultTTL"`
+	ColorLogs  bool           `json:"colorLogs"`
 }
 
 // ProxyServer - main server with config
@@ -73,9 +76,14 @@ func (server *ProxyServer) Listen() {
 	}
 	requestCache := cache.NewRequestCache(c, server.config.DefaultTTL)
 
+	loggerConf := middleware.LoggerConfig{
+		Output:      os.Stdout,
+		EnableColor: server.config.ColorLogs,
+	}
+
 	s := &http.Server{
 		Addr:    fmt.Sprintf(":%v", port),
-		Handler: Logger(requestCache.Handler(router)),
+		Handler: middleware.Logger(loggerConf, requestCache.Handler(router)),
 	}
 	log.Printf("Listening on port: %v", port)
 	log.Fatal(s.ListenAndServe())
