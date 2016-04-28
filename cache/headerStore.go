@@ -1,6 +1,9 @@
 package cache
 
-import "net/http"
+import (
+	"net/http"
+	"sync"
+)
 
 type responseHeaders struct {
 	statusCode int
@@ -9,6 +12,7 @@ type responseHeaders struct {
 
 type headerStore struct {
 	entries map[string]responseHeaders
+	mutex   *sync.Mutex
 }
 
 // Headers - get the stored header values
@@ -25,9 +29,14 @@ func (store *headerStore) Headers(key string) responseHeaders {
 
 //StoreHeaders - store the header values in an existing cached response
 func (store *headerStore) StoreHeaders(key string, headers responseHeaders) {
+	store.mutex.Lock()
 	store.entries[key] = headers
+	store.mutex.Unlock()
 }
 
 func newHeaderStore() *headerStore {
-	return &headerStore{entries: make(map[string]responseHeaders)}
+	return &headerStore{
+		entries: make(map[string]responseHeaders),
+		mutex:   &sync.Mutex{},
+	}
 }
