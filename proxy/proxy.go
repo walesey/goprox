@@ -19,6 +19,18 @@ func singleJoiningSlash(a, b string) string {
 	return a + b
 }
 
+func transformUrls(target, dest *url.URL) {
+	targetQuery := target.RawQuery
+	dest.Scheme = target.Scheme
+	dest.Host = target.Host
+	dest.Path = singleJoiningSlash(target.Path, dest.Path)
+	if targetQuery == "" || dest.RawQuery == "" {
+		dest.RawQuery = targetQuery + dest.RawQuery
+	} else {
+		dest.RawQuery = targetQuery + "&" + dest.RawQuery
+	}
+}
+
 func newLoadBallancerReverseProxy(route string, targets ...*url.URL) *httputil.ReverseProxy {
 	index := 0
 	director := func(req *http.Request) {
@@ -27,9 +39,8 @@ func newLoadBallancerReverseProxy(route string, targets ...*url.URL) *httputil.R
 		}
 		target := targets[index]
 		index = index + 1
-		req.URL.Scheme = target.Scheme
-		req.URL.Host = target.Host
-		req.URL.Path = singleJoiningSlash(target.Path, req.URL.Path[len(route):])
+		req.URL.Path = req.URL.Path[len(route):]
+		transformUrls(target, req.URL)
 	}
 	return &httputil.ReverseProxy{
 		Director: director,
@@ -38,9 +49,8 @@ func newLoadBallancerReverseProxy(route string, targets ...*url.URL) *httputil.R
 
 func newSingleProxy(route string, target *url.URL) *httputil.ReverseProxy {
 	director := func(req *http.Request) {
-		req.URL.Scheme = target.Scheme
-		req.URL.Host = target.Host
-		req.URL.Path = singleJoiningSlash(target.Path, req.URL.Path[len(route):])
+		req.URL.Path = req.URL.Path[len(route):]
+		transformUrls(target, req.URL)
 	}
 	return &httputil.ReverseProxy{
 		Director: director,

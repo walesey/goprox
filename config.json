@@ -1,18 +1,21 @@
 {
-  "servers": [
-      {
-        "path": "/",
-        "serverType": "loadBallancer",
-        "mappings": [
-          "http://localhost:3000/"
-        ]
-      },
-    {
-      "path": "/images/",
-      "serverType": "loadBallancer",
-      "mappings": [
-        "http://localhost:5000/"
-      ]
-    }
-  ]
+    "defaultTTL": 300,
+    "cacheType": "memoryCache",
+    "colorLogs": true,
+    "servers": [
+        {
+            "path": "/",
+            "serverType": "loadBallancer",
+            "mappings": [
+                "http://localhost:3000/"
+            ]
+        },
+        {
+            "path": "/images/",
+            "serverType": "loadBallancer",
+            "mappings": [
+                "http://localhost:5000/"
+            ]
+        }
+    ]
 }
