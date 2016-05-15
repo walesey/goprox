@@ -2,6 +2,7 @@ package cache
 
 import (
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -14,12 +15,14 @@ type memoryCacheItem struct {
 // MemoryCache - implementation of a key value store using ram
 type MemoryCache struct {
 	store map[string]*memoryCacheItem
+	mutex *sync.Mutex
 }
 
 // NewMemoryCache - create a new instance of FileCache
 func NewMemoryCache() Cache {
 	return &MemoryCache{
 		store: make(map[string]*memoryCacheItem),
+		mutex: &sync.Mutex{},
 	}
 }
 
@@ -29,7 +32,10 @@ func (mCache *MemoryCache) Set(key string, value []byte) {
 		value: value,
 		ttl:   -1,
 	}
+	mCache.mutex.Lock()
 	mCache.store[key] = item
+	mCache.mutex.Unlock()
+
 	mCache.Refresh(key)
 }
 
@@ -57,16 +63,20 @@ func (mCache *MemoryCache) GetLastGoodCopy(key string) ([]byte, error) {
 
 // Refresh - reset the expiry timer
 func (mCache *MemoryCache) Refresh(key string) {
+	mCache.mutex.Lock()
 	item, ok := mCache.store[key]
 	if ok {
 		item.createdAt = time.Now().UTC()
 	}
+	mCache.mutex.Unlock()
 }
 
 // Expire - set the expiry time
 func (mCache *MemoryCache) Expire(key string, ttl int) {
+	mCache.mutex.Lock()
 	item, ok := mCache.store[key]
 	if ok {
 		item.ttl = ttl
 	}
+	mCache.mutex.Unlock()
 }
