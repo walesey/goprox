@@ -25,6 +25,7 @@ type Config struct {
 	Servers    []ServerConfig `json:"servers"`
 	CacheType  string         `json:"cacheType"`
 	DefaultTTL int            `json:"defaultTTL"`
+	MaxTTL     int            `json:"maxTTL"`
 	ColorLogs  bool           `json:"colorLogs"`
 }
 
@@ -74,7 +75,7 @@ func (server *ProxyServer) Listen() {
 	} else {
 		c = cache.NewMemoryCache()
 	}
-	requestCache := cache.NewRequestCache(c, server.config.DefaultTTL)
+	requestCache := cache.NewRequestCache(c, server.config.DefaultTTL, server.config.MaxTTL)
 
 	loggerConf := middleware.LoggerConfig{
 		Output:      os.Stdout,

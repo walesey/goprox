@@ -10,9 +10,9 @@ import (
 )
 
 type RequestCache struct {
-	defaultTTL int
-	cache      Cache
-	hStore     *headerStore
+	defaultTTL, maxTTL int
+	cache              Cache
+	hStore             *headerStore
 }
 
 type requestCacheInterceptor struct {
@@ -60,6 +60,13 @@ func copyHeaders(src, dest http.Header) {
 	}
 }
 
+func minInt(i1, i2 int) int {
+	if i1 < i2 {
+		return i1
+	}
+	return i2
+}
+
 func (rci *requestCacheInterceptor) Header() http.Header {
 	return rci.header
 }
@@ -76,9 +83,10 @@ func (rci *requestCacheInterceptor) WriteHeader(statusCode int) {
 }
 
 // NewRequestCache - create a new instance of NewRequestCache
-func NewRequestCache(cache Cache, defaultTTL int) *RequestCache {
+func NewRequestCache(cache Cache, defaultTTL, maxTTL int) *RequestCache {
 	return &RequestCache{
 		defaultTTL: defaultTTL,
+		maxTTL:     maxTTL,
 		cache:      cache,
 		hStore:     newHeaderStore(),
 	}
@@ -132,7 +140,7 @@ func (rc *RequestCache) handleCaching(w http.ResponseWriter, r *http.Request, ne
 				if cacheSpecs.nocache {
 					rc.cache.Expire(key, 0)
 				} else {
-					rc.cache.Expire(key, cacheSpecs.maxage)
+					rc.cache.Expire(key, minInt(cacheSpecs.maxage, rc.maxTTL))
 				}
 			}
 		}
