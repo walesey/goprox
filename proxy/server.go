@@ -72,10 +72,19 @@ func (server *ProxyServer) Listen() {
 	var c cache.Cache
 	if server.config.CacheType == "fileSystem" {
 		// c = cache.NewFileCache()
-	} else {
+	} else if server.config.CacheType == "memoryCache" {
 		c = cache.NewMemoryCache()
 	}
-	requestCache := cache.NewRequestCache(c, server.config.DefaultTTL, server.config.MaxTTL)
+
+	var handler http.HandlerFunc
+	if c != nil {
+		requestCache := cache.NewRequestCache(c, server.config.DefaultTTL, server.config.MaxTTL)
+		handler = requestCache.Handler(router)
+	} else {
+		handler = func(w http.ResponseWriter, r *http.Request) {
+			router.ServeHTTP(w, r)
+		}
+	}
 
 	loggerConf := middleware.LoggerConfig{
 		Output:      os.Stdout,
@@ -84,7 +93,7 @@ func (server *ProxyServer) Listen() {
 
 	s := &http.Server{
 		Addr:    fmt.Sprintf(":%v", port),
-		Handler: middleware.Logger(loggerConf, requestCache.Handler(router)),
+		Handler: middleware.Logger(loggerConf, handler),
 	}
 	log.Printf("Listening on port: %v", port)
 	log.Fatal(s.ListenAndServe())
